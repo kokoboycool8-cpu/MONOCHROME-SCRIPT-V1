@@ -1,0 +1,403 @@
+```lua
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local espEnabled = false
+local highlights = {}
+local labels = {}
+
+--// GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "ESP_GUI"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 220, 0, 380)
+main.Position = UDim2.new(0.5, -110, 0.5, -190)
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+main.BorderSizePixel = 0
+main.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = main
+
+--// Title
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 35)
+title.BackgroundTransparency = 1
+title.Text = "ESP"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextSize = 20
+title.Font = Enum.Font.SourceSansBold
+title.Parent = main
+
+--// ESP Button
+local espButton = Instance.new("TextButton")
+espButton.Size = UDim2.new(0, 180, 0, 40)
+espButton.Position = UDim2.new(0.5, -90, 0, 40)
+espButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+espButton.TextSize = 18
+espButton.Font = Enum.Font.SourceSansBold
+espButton.Text = "ESP: Off"
+espButton.BorderSizePixel = 0
+espButton.Parent = main
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 6)
+buttonCorner.Parent = espButton
+
+--// Code Label
+local codeLabel = Instance.new("TextLabel")
+codeLabel.Size = UDim2.new(1, -20, 0, 35)
+codeLabel.Position = UDim2.new(0, 10, 0, 90)
+codeLabel.BackgroundTransparency = 1
+codeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+codeLabel.TextSize = 16
+codeLabel.Font = Enum.Font.SourceSansBold
+codeLabel.Text = "Code: Not Checked"
+codeLabel.Parent = main
+
+--// Refresh Code Button
+local refreshButton = Instance.new("TextButton")
+refreshButton.Size = UDim2.new(0, 180, 0, 35)
+refreshButton.Position = UDim2.new(0.5, -90, 0, 125)
+refreshButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshButton.TextSize = 16
+refreshButton.Font = Enum.Font.SourceSansBold
+refreshButton.Text = "Refresh Code"
+refreshButton.BorderSizePixel = 0
+refreshButton.Parent = main
+
+local refreshCorner = Instance.new("UICorner")
+refreshCorner.CornerRadius = UDim.new(0, 6)
+refreshCorner.Parent = refreshButton
+
+--// Key Buttons
+local keyButtons = {}
+
+local function createKeyButton(keyNumber, yPosition)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 180, 0, 35)
+    button.Position = UDim2.new(0.5, -90, 0, yPosition)
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 16
+    button.Font = Enum.Font.SourceSansBold
+    button.Text = "Collect Key " .. keyNumber
+    button.BorderSizePixel = 0
+    button.Parent = main
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = button
+
+    keyButtons[keyNumber] = button
+
+    button.MouseButton1Click:Connect(function()
+        local monochrome = workspace:FindFirstChild("monochrome")
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+
+        if not monochrome or not root then
+            button.Text = "Unable to Collect"
+
+            task.delay(1.5, function()
+                if button.Parent then
+                    button.Text = "Collect Key " .. keyNumber
+                end
+            end)
+
+            return
+        end
+
+        local key = monochrome:FindFirstChild("HiddenKey" .. keyNumber)
+        local keyFolder = key and key:FindFirstChild("Key")
+        local promptPoint = keyFolder and keyFolder:FindFirstChild("KeyPromptPoint")
+        local prompt = promptPoint and promptPoint:FindFirstChild("KeyPrompt")
+
+        if not key or not prompt or not prompt:IsA("ProximityPrompt") then
+            button.Text = "Key Not Found"
+
+            task.delay(1.5, function()
+                if button.Parent then
+                    button.Text = "Collect Key " .. keyNumber
+                end
+            end)
+
+            return
+        end
+
+        local keyPart
+
+        if key:IsA("BasePart") then
+            keyPart = key
+        elseif key:IsA("Model") then
+            keyPart = key.PrimaryPart
+                or key:FindFirstChildWhichIsA("BasePart", true)
+        end
+
+        if not keyPart then
+            button.Text = "Key Position Missing"
+
+            task.delay(1.5, function()
+                if button.Parent then
+                    button.Text = "Collect Key " .. keyNumber
+                end
+            end)
+
+            return
+        end
+
+        --// Save original position
+        local originalCFrame = root.CFrame
+
+        button.Text = "Collecting..."
+
+        --// Disable line-of-sight requirement
+        prompt.RequiresLineOfSight = false
+
+        --// Increase activation distance
+        prompt.MaxActivationDistance = 5000
+
+        --// Teleport to the key
+        root.CFrame = keyPart.CFrame + Vector3.new(0, 3, 0)
+
+        --// Allow teleport to register
+        task.wait(0.15)
+
+        --// Fire the prompt once
+        if fireproximityprompt then
+            fireproximityprompt(prompt)
+        else
+            prompt:InputHoldBegin()
+            task.wait(prompt.HoldDuration)
+            prompt:InputHoldEnd()
+        end
+
+        --// Allow interaction to register
+        task.wait(0.15)
+
+        --// Return to original position
+        if root and root.Parent then
+            root.CFrame = originalCFrame
+        end
+
+        button.Text = "Key " .. keyNumber .. " Collected"
+
+        task.delay(1.5, function()
+            if button.Parent then
+                button.Text = "Collect Key " .. keyNumber
+            end
+        end)
+    end)
+
+    return button
+end
+
+createKeyButton(1, 170)
+createKeyButton(2, 210)
+createKeyButton(3, 250)
+createKeyButton(4, 290)
+
+--// Draggable UI - PC + Mobile
+local dragging = false
+local dragStart
+local startPosition
+
+main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = true
+        dragStart = input.Position
+        startPosition = main.Position
+    end
+end)
+
+main.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not dragging then
+        return
+    end
+
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+
+        local delta = input.Position - dragStart
+
+        main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+--// Create ESP Label
+local function createLabel(target, text)
+    local adorneePart = target
+
+    if target:IsA("Model") then
+        adorneePart = target:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    if not adorneePart then
+        return
+    end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Label"
+    billboard.Adornee = adorneePart
+    billboard.Size = UDim2.new(0, 150, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = gui
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0
+    label.TextSize = 16
+    label.Font = Enum.Font.SourceSansBold
+    label.Text = text
+    label.Parent = billboard
+
+    table.insert(labels, billboard)
+
+    return billboard
+end
+
+--// Clear ESP
+local function clearESP()
+    for _, highlight in ipairs(highlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+
+    for _, label in ipairs(labels) do
+        if label and label.Parent then
+            label:Destroy()
+        end
+    end
+
+    highlights = {}
+    labels = {}
+end
+
+--// Enable ESP
+local function enableESP()
+    clearESP()
+
+    local monochrome = workspace:FindFirstChild("monochrome")
+
+    if monochrome then
+        for i = 1, 4 do
+            local key = monochrome:FindFirstChild("HiddenKey" .. i)
+
+            if key then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "HiddenKeyESP"
+                highlight.Adornee = key
+                highlight.FillTransparency = 0.5
+                highlight.OutlineTransparency = 0
+                highlight.Parent = key
+
+                table.insert(highlights, highlight)
+
+                createLabel(key, "Key " .. i)
+            end
+        end
+    end
+
+    --// VER
+    local ver = workspace:FindFirstChild("VER")
+
+    if ver then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "VER_ESP"
+        highlight.Adornee = ver
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Parent = ver
+
+        table.insert(highlights, highlight)
+
+        createLabel(ver, "MONOCHROME")
+    end
+end
+
+--// Update Distances
+RunService.RenderStepped:Connect(function()
+    if not espEnabled then
+        return
+    end
+
+    local character = player.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+
+    if not root then
+        return
+    end
+
+    for _, billboard in ipairs(labels) do
+        if billboard and billboard.Parent and billboard.Adornee then
+            local target = billboard.Adornee
+            local distance = (root.Position - target.Position).Magnitude
+
+            local label = billboard:FindFirstChildOfClass("TextLabel")
+
+            if label then
+                local name = label.Text:match("^[^\n]+")
+                label.Text = name .. "\n" .. math.floor(distance) .. " studs"
+            end
+        end
+    end
+end)
+
+--// Refresh Code
+refreshButton.MouseButton1Click:Connect(function()
+    local monochrome = workspace:FindFirstChild("monochrome")
+    local codeNote = monochrome and monochrome:FindFirstChild("CodeNote")
+    local printed = codeNote and codeNote:FindFirstChild("Printed")
+    local digits = printed and printed:FindFirstChild("Digits")
+
+    if digits and digits:IsA("TextLabel") then
+        codeLabel.Text = "Code: " .. digits.Text
+    elseif digits and digits:IsA("TextButton") then
+        codeLabel.Text = "Code: " .. digits.Text
+    else
+        codeLabel.Text = "Code: Not Found"
+    end
+end)
+
+--// ESP Toggle
+espButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+
+    if espEnabled then
+        espButton.Text = "ESP: On"
+        enableESP()
+    else
+        espButton.Text = "ESP: Off"
+        clearESP()
+    end
+end)
+```
